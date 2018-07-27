@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,16 +9,16 @@ using Telegram.Bot.Types.Enums;
 
 namespace LunarLabs.Bots
 {
-    public class Bot
+    public class CustomBot
     {
         public class Command
         {
             public string name;
             public string description;
             public bool hidden;
-            public Action<Bot, Message> handler;
+            public Action<CustomBot, Message> handler;
 
-            public Command(string name, string description, bool hidden, Action<Bot, Message> handler)
+            public Command(string name, string description, bool hidden, Action<CustomBot, Message> handler)
             {
                 this.name = name;
                 this.description = description;
@@ -30,7 +29,7 @@ namespace LunarLabs.Bots
 
         private TelegramBotClient client;
 
-        public Bot(string token)
+        public CustomBot(string token)
         {
             this.client = new TelegramBotClient(token);
             RegisterCommand("groups", "Shows list of groups", (bot, msg) => ShowGroups(msg), true);
@@ -76,7 +75,7 @@ namespace LunarLabs.Bots
         private Dictionary<string, Command> _commands = new Dictionary<string, Command>();
         private Dictionary<ChatId, string> _groupList = new Dictionary<ChatId, string>();
 
-        public void RegisterCommand(string name, string description, Action<Bot, Message> handler, bool hidden = false)
+        public void RegisterCommand(string name, string description, Action<CustomBot, Message> handler, bool hidden = false)
         {
             var cmd = new Command(name, description, hidden, handler);
             _commands["/" + name] = cmd;
@@ -86,12 +85,18 @@ namespace LunarLabs.Bots
         {
             var msg = e.Message;
 
-            switch (msg.Chat.Type)
+            try
             {
-                case ChatType.Private: await OnPrivateMessage(msg); break;
-                default: await OnPublicMessage(msg); break;
+                switch (msg.Chat.Type)
+                {
+                    case ChatType.Private: await OnPrivateMessage(msg); break;
+                    default: await OnPublicMessage(msg); break;
+                }
             }
-
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
         }
 
         private async Task OnPublicMessage(Message msg)
@@ -112,6 +117,33 @@ namespace LunarLabs.Bots
             }
         }
 
+        private HashSet<long> _admins = new HashSet<long>();
+
+        public bool IsAdmin(ChatId id)
+        {
+            return _admins.Contains(id.Identifier);
+        }
+
+        public void AddAdmin(ChatId id)
+        {
+            _admins.Add(id.Identifier);
+        }
+
+        public void RemoveAdmin(ChatId id)
+        {
+            _admins.Remove(id.Identifier);
+        }
+
+        protected virtual async Task<bool> OnDefaultChatAsync(Message msg)
+        {
+            return true;
+        }
+
+        protected virtual async Task<bool> OnPermissionFailedForCommand(Message msg)
+        {
+            return true;
+        }
+        
         private async Task OnPrivateMessage(Message msg)
         {
             switch (msg.Type)
@@ -123,33 +155,57 @@ namespace LunarLabs.Bots
                         if (_commands.ContainsKey(text))
                         {
                             var cmd = _commands[text];
-                            cmd.handler(this, msg);
-                            return;
+
+                            if (!cmd.hidden || IsAdmin(msg.Chat.Id))
+                            {
+                                cmd.handler(this, msg);
+                                return;
+                            }
+                            else
+                            {
+                                if (!await OnPermissionFailedForCommand(msg))
+                                {
+                                    return;
+                                }
+                            }
                         }
 
-                        await Speak(msg.Chat.Id, "Hola amigo!");
-
-                        var sb = new StringBuilder();
-                        foreach (var cmd in _commands.Values)
+                        if (await OnDefaultChatAsync(msg))
                         {
-                            sb.AppendLine($"/{cmd.name}\t\t{cmd.description}");
+                            var sb = new StringBuilder();
+                            foreach (var cmd in _commands.Values)
+                            {
+                                if (!cmd.hidden || IsAdmin(msg.Chat.Id))
+                                {
+                                    sb.AppendLine($"/{cmd.name}\t\t{cmd.description}");
+                                }
+                            }
+
+                            if (sb.Length > 0)
+                            {
+                                await Speak(msg.Chat.Id, sb.ToString());
+                            }
                         }
 
-                        await Speak(msg.Chat.Id, sb.ToString());
                         break;
                     }
             }
         }
 
-        private async Task Speak(ChatId id, string text)
+        public async Task Speak(ChatId id, string text)
         {
             await Speak(id, new string[] { text });
         }
 
-        private async Task Speak(ChatId id, IEnumerable<string> lines)
+        public async Task Speak(ChatId id, IEnumerable<string> lines)
         {
             foreach (var line in lines)
             {
+                if (string.IsNullOrEmpty(line))
+                {
+                    continue;
+                }
+
                 await client.SendChatActionAsync(id, ChatAction.Typing);
 
                 await Task.Delay(1000); // simulate longer running task
