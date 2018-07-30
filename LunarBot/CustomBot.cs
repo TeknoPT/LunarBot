@@ -16,9 +16,9 @@ namespace LunarLabs.Bots
             public string name;
             public string description;
             public bool hidden;
-            public Action<CustomBot, Message> handler;
+            public Func<Message, int, Task<int>> handler;
 
-            public Command(string name, string description, bool hidden, Action<CustomBot, Message> handler)
+            public Command(string name, string description, bool hidden, Func<Message, int, Task<int>> handler)
             {
                 this.name = name;
                 this.description = description;
@@ -32,21 +32,23 @@ namespace LunarLabs.Bots
         public CustomBot(string token)
         {
             this.client = new TelegramBotClient(token);
-            RegisterCommand("groups", "Shows list of groups", (bot, msg) => ShowGroups(msg), true);
+            RegisterCommand("groups", "Shows list of groups", ShowGroups, true);
         }
 
-        private async void ShowGroups(Message msg)
+        private async Task<int> ShowGroups(Message msg, int state)
         {
             if (_groupList.Count == 0)
             {
                 await Speak(msg.Chat.Id, $"No groups found");
-                return;
+                return 0;
             }
 
             foreach (var entry in _groupList)
             {
                 await Speak(msg.Chat.Id, $"{entry.Value} => {entry.Key}");
             }
+
+            return 0;
         }
 
         public void Start(Action idle)
@@ -75,8 +77,13 @@ namespace LunarLabs.Bots
         private Dictionary<string, Command> _commands = new Dictionary<string, Command>();
         private Dictionary<ChatId, string> _groupList = new Dictionary<ChatId, string>();
 
-        public void RegisterCommand(string name, string description, Action<CustomBot, Message> handler, bool hidden = false)
+        public void RegisterCommand(string name, string description, Func<Message, int, Task<int>> handler, bool hidden = false)
         {
+            if (string.IsNullOrEmpty(name) || name.StartsWith("/"))
+            {
+                throw new ArgumentException("Invalid command name");
+            }
+
             var cmd = new Command(name, description, hidden, handler);
             _commands["/" + name] = cmd;
         }
@@ -143,7 +150,10 @@ namespace LunarLabs.Bots
         {
             return true;
         }
-        
+
+        private Dictionary<long, int> _state = new Dictionary<long, int>();
+        private Dictionary<long, Command> _cmds = new Dictionary<long, Command>();
+
         private async Task OnPrivateMessage(Message msg)
         {
             switch (msg.Type)
@@ -152,32 +162,61 @@ namespace LunarLabs.Bots
                     {
                         var text = msg.Text;
 
+                        Command cmd;
+
+                        if (_cmds.ContainsKey(msg.Chat.Id))
+                        {
+                            cmd = _cmds[msg.Chat.Id];
+                        }
+                        else
                         if (_commands.ContainsKey(text))
                         {
-                            var cmd = _commands[text];
+                            cmd = _commands[text];
+                        }
+                        else
+                        {
+                            cmd = null;
+                        }
 
-                            if (!cmd.hidden || IsAdmin(msg.Chat.Id))
+                        if (cmd !=null && (!cmd.hidden || IsAdmin(msg.Chat.Id)))
+                        {
+                            var state = _state.ContainsKey(msg.Chat.Id) ? _state[msg.Chat.Id] : 0;
+                            state = await cmd.handler(msg, state);
+                            if (state != 0)
                             {
-                                cmd.handler(this, msg);
-                                return;
+                                _state[msg.Chat.Id] = state;
+                                _cmds[msg.Chat.Id] = cmd;
                             }
                             else
                             {
-                                if (!await OnPermissionFailedForCommand(msg))
+                                try
                                 {
-                                    return;
+                                    _state.Remove(msg.Chat.Id);
+                                    _cmds.Remove(msg.Chat.Id);
                                 }
+                                catch
+                                {
+                                    // ignore
+                                }
+                            }
+                            return;
+                        }
+                        else
+                        {
+                            if (!await OnPermissionFailedForCommand(msg))
+                            {
+                                return;
                             }
                         }
 
                         if (await OnDefaultChatAsync(msg))
                         {
                             var sb = new StringBuilder();
-                            foreach (var cmd in _commands.Values)
+                            foreach (var entry in _commands.Values)
                             {
-                                if (!cmd.hidden || IsAdmin(msg.Chat.Id))
+                                if (!entry.hidden || IsAdmin(msg.Chat.Id))
                                 {
-                                    sb.AppendLine($"/{cmd.name}\t\t{cmd.description}");
+                                    sb.AppendLine($"/{entry.name}\t\t{entry.description}");
                                 }
                             }
 
