@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27703.2042
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LunarBot", "LunarBot\LunarBot.csproj", "{44037D1B-1014-40C2-AA7E-9CAC28340727}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LunarBot", "LunarBot\Lunar.Bot.csproj", "{44037D1B-1014-40C2-AA7E-9CAC28340727}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
