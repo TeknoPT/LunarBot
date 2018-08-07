@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace LunarLabs.Bots
 {
-    public class BotStorage 
+    public class BotStorage
     {
         public readonly string Name;
         public readonly string FileName;
@@ -22,6 +22,14 @@ namespace LunarLabs.Bots
         {
             this.Name = name;
             this.FileName = path + name + ".xml";
+        }
+
+        public void Visit(Action<string, List<string>> visitor)
+        {
+            foreach(var entry in _keystore)
+            {
+                visitor(entry.Key, entry.Value);
+            }
         }
 
         internal bool Load()

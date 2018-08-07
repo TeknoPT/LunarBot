@@ -3,6 +3,7 @@ using Discord.WebSocket;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace LunarLabs.Bots
@@ -23,10 +24,8 @@ namespace LunarLabs.Bots
 
         private Dictionary<ulong, ISocketMessageChannel> _channels = new Dictionary<ulong, ISocketMessageChannel>();
 
-        public async Task Send(long target, string text)
+        private ISocketMessageChannel GetSocket(long target)
         {
-            //var channel = _channels[(ulong)target];
-
             var id = (ulong)target;
 
             var channel = _client.GetChannel(id) as ISocketMessageChannel;
@@ -37,13 +36,19 @@ namespace LunarLabs.Bots
 
                 if (user == null)
                 {
-                    return;
+                    return null;
                 }
 
-                channel = (ISocketMessageChannel)(await user.GetOrCreateDMChannelAsync());
+                channel = (ISocketMessageChannel)(user.GetOrCreateDMChannelAsync().GetAwaiter().GetResult());
             }
 
-            await channel.SendMessageAsync(text);
+            return channel;
+        }
+
+        public async Task Send(long target, string text)
+        {
+            var socket = GetSocket(target);
+            await socket.SendMessageAsync(text);
         }
 
         public void Start(ConcurrentQueue<BotMessage> queue)
@@ -92,6 +97,16 @@ namespace LunarLabs.Bots
         public string GetCommandPrefix()
         {
             return "!";
+        }
+
+        public void SendFile(long target, byte[] bytes, string fileName)
+        {
+            var socket = GetSocket(target);
+
+            using (var stream = new MemoryStream(bytes))
+            {
+                socket.SendFileAsync(stream, fileName).Wait();
+            }            
         }
     }
 }

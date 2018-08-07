@@ -59,6 +59,7 @@ namespace LunarLabs.Bots
         string GetCommandPrefix();
         void Start(ConcurrentQueue<BotMessage> queue);
         Task Send(long target, string text);
+        void SendFile(long target, byte[] bytes, string fileName);
     }
 
     public class BotCommand
@@ -210,7 +211,7 @@ namespace LunarLabs.Bots
             return 0;
         }
 
-        public BotStorage FindStorage(string name)
+        public BotStorage FindStorage(string name, bool canCreate = true)
         {
             name = name.ToLower();
 
@@ -220,9 +221,22 @@ namespace LunarLabs.Bots
             }
 
             var result = new BotStorage(_path, name);
-            result.Load();
+            var loaded = result.Load();
+
+            if (!loaded && !canCreate)
+            {
+                return null;
+            }
+
             _storage[name] = result;
             return result;
+        }
+
+        private ConcurrentQueue<Action> _delayedQueue = new ConcurrentQueue<Action>();
+
+        public void RunLater(Action action)
+        {
+            _delayedQueue.Enqueue(action);
         }
 
         public void Start(Action idle = null)
@@ -254,6 +268,19 @@ namespace LunarLabs.Bots
                         {
                             ProcessMessage(msg);
                         }
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(e);
+                    }
+                }
+
+                Action delayedAction;
+                if (_delayedQueue.TryDequeue(out delayedAction))
+                {
+                    try
+                    {
+                        delayedAction();
                     }
                     catch (Exception e)
                     {
@@ -470,6 +497,47 @@ namespace LunarLabs.Bots
 
                 connection.Send(target, line).Wait();
             }
+        }
+
+        public void SendFile(BotPlatform platform, long target, byte[] content, string fileName)
+        {
+            var connection = _connections[platform];
+            connection.SendFile(target, content, fileName);
+        }
+
+        private Dictionary<string, object> _memory = new Dictionary<string, object>();
+
+        public void RememberValue(MessageSender sender, object obj)
+        {
+            _memory[sender.Tag] = obj;
+        }
+
+        public object GetLastValue(MessageSender sender)
+        {
+            var tag = sender.Tag;
+            if (_memory.ContainsKey(tag))
+            {
+                return _memory[tag];
+            }
+
+            return null;
+        }
+
+        public MessageSender FromTag(string tag)
+        {
+            var temp = tag.Split('_');
+            BotPlatform platform;
+            if (Enum.TryParse<BotPlatform>(temp[0], true, out platform))
+            {
+                long id;
+                
+                if (long.TryParse(temp[1], out id))
+                {
+                    return new MessageSender() { Platform = platform, ID = id };
+                }
+            }
+
+            throw new ArgumentException("Invalid tag");
         }
 
     }

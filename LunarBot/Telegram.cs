@@ -131,5 +131,14 @@ namespace LunarLabs.Bots
         {
             return "/";
         }
+
+        public void SendFile(long target, byte[] bytes, string fileName)
+        {
+            using (var stream = new MemoryStream(bytes))
+            {
+                var document = new Telegram.Bot.Types.InputFiles.InputOnlineFile(stream, fileName);
+                _client.SendDocumentAsync(target, document).Wait();
+            }
+        }
     }
 }
