@@ -3,9 +3,9 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0</TargetFrameworks>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <AssemblyVersion>0.1.1.0</AssemblyVersion>
-    <FileVersion>0.1.1.0</FileVersion>
-    <Version>0.1.1</Version>
+    <AssemblyVersion>0.1.2.0</AssemblyVersion>
+    <FileVersion>0.1.2.0</FileVersion>
+    <Version>0.1.2</Version>
     <Description>Makes it easier to create Telegram and Discord bots</Description>
     <Copyright>Sergio Flores</Copyright>
     <PackageProjectUrl>https://github.com/Relfos/LunarBot</PackageProjectUrl>
