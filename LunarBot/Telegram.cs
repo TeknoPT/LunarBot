@@ -31,6 +31,11 @@ namespace LunarLabs.Bots
             _client.StartReceiving();
         }
 
+        public void Stop()
+        {
+            _client.StopReceiving();
+        }
+
         private byte[] FetchFile(string fileID)
         {
             using (var outputStream = new MemoryStream())
@@ -124,7 +129,7 @@ namespace LunarLabs.Bots
 
             await Task.Delay(1500); // simulate longer running task
 
-            await _client.SendTextMessageAsync(target, text);
+            await _client.SendTextMessageAsync(target, text, ParseMode.Markdown);
         }
 
         public string GetCommandPrefix()

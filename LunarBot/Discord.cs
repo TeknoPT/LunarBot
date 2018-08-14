@@ -60,6 +60,11 @@ namespace LunarLabs.Bots
             Console.WriteLine($"Connected to Discord");
         }
 
+        public void Stop()
+        {
+            _client.StopAsync().Wait();
+        }
+
         private async Task MessageReceived(SocketMessage src)
         {
             try

@@ -58,6 +58,7 @@ namespace LunarLabs.Bots
     {
         string GetCommandPrefix();
         void Start(ConcurrentQueue<BotMessage> queue);
+        void Stop();
         Task Send(long target, string text);
         void SendFile(long target, byte[] bytes, string fileName);
     }
@@ -317,6 +318,20 @@ namespace LunarLabs.Bots
                 }
             }
 
+            foreach (var entry in _connections)
+            {
+                Console.Write($"Shutting down connection to {entry.Key}...");
+                try
+                {
+                    entry.Value.Stop();
+                    Console.WriteLine("Done");
+                }
+                catch
+                {
+                    Console.WriteLine("Failed");
+                }
+            }
+
         }
 
         public void Stop()
@@ -440,7 +455,7 @@ namespace LunarLabs.Bots
 
         protected virtual void OnMessage(BotMessage msg)
         {
-
+            ListCommands(msg);
         }
 
         public void ListCommands(BotMessage msg, string prefix = null)
