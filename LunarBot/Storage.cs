@@ -26,9 +26,12 @@ namespace LunarLabs.Bots
 
         public void Visit(Action<string, List<string>> visitor)
         {
-            foreach(var entry in _keystore)
+            lock (_keystore)
             {
-                visitor(entry.Key, entry.Value);
+                foreach (var entry in _keystore)
+                {
+                    visitor(entry.Key, entry.Value);
+                }
             }
         }
 
@@ -115,75 +118,131 @@ namespace LunarLabs.Bots
 
         private void Add(MessageSender sender, string obj, bool append)
         {
-            var tag = sender.Tag;
-            List<string> list;
-
-            if (_keystore.ContainsKey(tag))
+            lock (_keystore)
             {
-                list = _keystore[tag];
-            }
-            else
-            {
-                list = new List<string>();
-                _keystore[tag] = list;
-            }
+                var tag = sender.Tag;
+                List<string> list;
 
-            if (list.Count > 0 && !append)
-            {
-                list.Clear();
+                if (_keystore.ContainsKey(tag))
+                {
+                    list = _keystore[tag];
+                }
+                else
+                {
+                    list = new List<string>();
+                    _keystore[tag] = list;
+                }
+
+                if (list.Count > 0 && !append)
+                {
+                    list.Clear();
+                }
+
+                list.Add(obj);
+
+                Modified = true;
             }
-
-            list.Add(obj);
-
-            Modified = true;
         }
 
         public void Remove(MessageSender sender)
         {
             var tag = sender.Tag;
-            if (_keystore.ContainsKey(tag))
+
+            lock (_keystore)
             {
-                _keystore.Remove(tag);
-                Modified = true;
+                if (_keystore.ContainsKey(tag))
+                {
+                    _keystore.Remove(tag);
+                    Modified = true;
+                }
+            }
+        }
+
+        public bool Remove(MessageSender sender, string entry, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
+        {
+            lock (_keystore)
+            {
+                var tag = sender.Tag;
+                if (_keystore.ContainsKey(tag))
+                {
+                    var list = _keystore[tag];
+                    var oldCount = list.Count;
+                    if (oldCount > 0)
+                    {
+                        list = list.Where(x => !x.Equals(entry, comparison)).ToList();
+
+                        var newCount = list.Count;
+                        if (newCount == oldCount)
+                        {
+                            return false;
+                        }
+
+                        if (newCount == 0)
+                        {
+                            _keystore.Remove(tag);
+                        }
+                        else
+                        {
+                            _keystore[tag] = list;
+                        }
+
+                        Modified = true;
+                        return true;
+                    }
+                }
+
+                return false;
             }
         }
 
         public string Get(MessageSender sender)
         {
-            var tag = sender.Tag;
-            if (_keystore.ContainsKey(tag))
+            lock (_keystore)
             {
-                return _keystore[tag].FirstOrDefault();
-            }
-            else
-            {
-                return null;
+                var tag = sender.Tag;
+                if (_keystore.ContainsKey(tag))
+                {
+                    return _keystore[tag].FirstOrDefault();
+                }
+                else
+                {
+                    return null;
+                }
             }
         }
 
         public IEnumerable<string> List(MessageSender sender)
         {
             var tag = sender.Tag;
-            if (_keystore.ContainsKey(tag))
+            lock (_keystore)
             {
-                return _keystore[tag];
-            }
-            else
-            {
-                return Array.Empty<string>();
+                if (_keystore.ContainsKey(tag))
+                {
+                    return _keystore[tag];
+                }
+                else
+                {
+                    return Array.Empty<string>();
+                }
             }
         }
 
         public bool Contains(MessageSender sender)
         {
-            var tag = sender.Tag;
-            return _keystore.ContainsKey(tag);
+            lock (_keystore)
+            {
+                var tag = sender.Tag;
+                return _keystore.ContainsKey(tag);
+            }
         }
 
         public int Count(MessageSender sender)
         {
-            var tag = sender.Tag;
-            return _keystore.ContainsKey(tag) ? _keystore[tag].Count : 0;
+            lock (_keystore)
+            {
+                var tag = sender.Tag;
+                return _keystore.ContainsKey(tag) ? _keystore[tag].Count : 0;
+            }
         }
     }
 }
