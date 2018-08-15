@@ -61,6 +61,7 @@ namespace LunarLabs.Bots
         void Stop();
         Task Send(long target, string text);
         void SendFile(long target, byte[] bytes, string fileName);
+        MessageSender Expand(long ID);
     }
 
     public class BotCommand
@@ -129,6 +130,7 @@ namespace LunarLabs.Bots
             }
 
             RegisterCommand("me", "Shows your ID", ShowMe, (msg) => IsCommand(msg, "me"));
+            RegisterCommand("whois", "Lookups someone by ID", ShowWhoIs, (msg) => IsCommand(msg, "whois"));
             RegisterCommand("where", "Shows list of public locations", WhereCommand, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender));
             RegisterCommand("addadmin", "Promotes someone to admin", PromoteAdmin, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender));
             //RegisterCommand("removeadmin", "Demotes someone from admin", DemoteAdmin, (msg) => msg.Visibility ==  MessageVisibility.Private && IsAdmin(msg.Sender));
@@ -157,9 +159,32 @@ namespace LunarLabs.Bots
 
         private int ShowMe(BotMessage msg, int state)
         {
-            Speak(msg.Sender.Platform, msg.Sender.ID, $"Your {msg.Sender.Platform} ID is {msg.Sender.ID}");
+            Speak(msg.Sender, $"Your {msg.Sender.Platform} ID is {msg.Sender.ID}");
             return 0;
+        }
 
+        private int ShowWhoIs(BotMessage msg, int state)
+        {
+            switch (state)
+            {
+                case 1:
+                    long ID;
+
+                    if (long.TryParse(msg.Text, out ID))
+                    {
+                        var user = Expand(msg.Sender.Platform, ID);
+                        Speak(msg.Sender, $"ID {ID} belongs to user with handle @{user.Handle}");
+                    }
+                    else
+                    {
+                        Speak(msg.Sender, "That's not an valid ID!");
+                    }
+                    return 0;
+
+                default:
+                    Speak(msg.Sender, "What ID you want to look up?");
+                    return 1;
+            }
         }
 
         private int PromoteAdmin(BotMessage msg, int state)
@@ -572,5 +597,10 @@ namespace LunarLabs.Bots
             throw new ArgumentException("Invalid tag");
         }
 
+        public MessageSender Expand(BotPlatform platform, long ID)
+        {
+            var connection = _connections[platform];
+            return connection.Expand(ID);
+        }
     }
 }

@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Args;
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
 namespace LunarLabs.Bots
@@ -66,7 +67,7 @@ namespace LunarLabs.Bots
                 msg.Visibility = src.Chat.Type == ChatType.Private ? MessageVisibility.Private : MessageVisibility.Public;
                 msg.Kind = kind;
                 msg.Text = kind == MessageKind.Text ? src.Text: "";
-                msg.Sender = new MessageSender() { ID = src.Chat.Id, Handle = src.Chat.Username, Name = Combine(src.Chat.FirstName, src.Chat.LastName), Platform = BotPlatform.Telegram };
+                msg.Sender = FromChat(src.Chat);
 
                 MessageFile file;
                 switch (src.Type)
@@ -108,6 +109,11 @@ namespace LunarLabs.Bots
             }
         }
 
+        private MessageSender FromChat(Chat chat)
+        {
+            return new MessageSender() { ID = chat.Id, Handle = chat.Username, Name = Combine(chat.FirstName, chat.LastName), Platform = BotPlatform.Telegram };
+        }
+
         private string Combine(string firstName, string lastName)
         {
             if (string.IsNullOrEmpty(firstName))
@@ -144,6 +150,12 @@ namespace LunarLabs.Bots
                 var document = new Telegram.Bot.Types.InputFiles.InputOnlineFile(stream, fileName);
                 _client.SendDocumentAsync(target, document).Wait();
             }
+        }
+
+        public MessageSender Expand(long ID)
+        {
+            var chat = _client.GetChatAsync(ID).GetAwaiter().GetResult();
+            return FromChat(chat);
         }
     }
 }

@@ -25,11 +25,11 @@ namespace LunarLabs.Bots
 
         private Dictionary<ulong, ISocketMessageChannel> _channels = new Dictionary<ulong, ISocketMessageChannel>();
 
-        private ISocketMessageChannel GetSocket(long target)
+        private IMessageChannel GetChannel(long target)
         {
             var id = (ulong)target;
 
-            var channel = _client.GetChannel(id) as ISocketMessageChannel;
+            var channel = _client.GetChannel(id) as IMessageChannel;
 
             if (channel == null)
             {
@@ -40,7 +40,7 @@ namespace LunarLabs.Bots
                     return null;
                 }
 
-                channel = (ISocketMessageChannel)(user.GetOrCreateDMChannelAsync().GetAwaiter().GetResult());
+                channel = (IMessageChannel)(user.GetOrCreateDMChannelAsync().GetAwaiter().GetResult());
             }
 
             return channel;
@@ -48,8 +48,8 @@ namespace LunarLabs.Bots
 
         public async Task Send(long target, string text)
         {
-            var socket = GetSocket(target);
-            await socket.SendMessageAsync(text);
+            var dest = GetChannel(target);
+            await dest.SendMessageAsync(text);
         }
 
         public void Start(ConcurrentQueue<BotMessage> queue)
@@ -107,12 +107,34 @@ namespace LunarLabs.Bots
 
         public void SendFile(long target, byte[] bytes, string fileName)
         {
-            var socket = GetSocket(target);
+            var socket = GetChannel(target);
 
             using (var stream = new MemoryStream(bytes))
             {
                 socket.SendFileAsync(stream, fileName).Wait();
             }            
         }
+
+        public MessageSender Expand(long ID)
+        {
+            var targetId = (ulong)ID;
+
+            var channel = _client.GetChannel(targetId) as IMessageChannel;
+
+            if (channel != null)
+            {
+                return new MessageSender() { ID = ID, Handle = channel.Name, Name = channel.Name, Platform = BotPlatform.Discord };
+            }
+
+            var user = _client.GetUser(targetId);
+
+            if (user != null)
+            {
+                return new MessageSender() { ID = ID, Handle = user.Username, Name = user.Username, Platform = BotPlatform.Discord };
+            }
+
+            throw new Exception("Can't find Discord ID " + targetId);
+        }
+
     }
 }
