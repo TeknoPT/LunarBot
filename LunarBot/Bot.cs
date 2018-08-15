@@ -67,15 +67,17 @@ namespace LunarLabs.Bots
     {
         public readonly string name;
         public readonly string description;
+        public readonly bool AllowShortcut;
         internal readonly Func<BotMessage, int, int> handler;
         internal readonly Func<BotMessage, bool> filter;
 
-        public BotCommand(string name, string description, Func<BotMessage, int, int> handler, Func<BotMessage, bool> filter = null)
+        public BotCommand(string name, string description, Func<BotMessage, int, int> handler, Func<BotMessage, bool> filter = null, bool allowShortcut = false)
         {
             this.name = name;
             this.description = description;
             this.handler = handler;
             this.filter = filter;
+            this.AllowShortcut = allowShortcut;
         }
     }
 
@@ -127,17 +129,17 @@ namespace LunarLabs.Bots
             }
 
             RegisterCommand("me", "Shows your ID", ShowMe, (msg) => IsCommand(msg, "me"));
-            RegisterCommand("groups", "Shows list of groups", ShowGroups, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender));
+            RegisterCommand("where", "Shows list of public locations", WhereCommand, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender));
             RegisterCommand("addadmin", "Promotes someone to admin", PromoteAdmin, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender));
             //RegisterCommand("removeadmin", "Demotes someone from admin", DemoteAdmin, (msg) => msg.Visibility ==  MessageVisibility.Private && IsAdmin(msg.Sender));
         }
 
         public bool IsCommand(BotMessage msg, string cmd)
         {
-            return msg.Text == _connections[msg.Sender.Platform].GetCommandPrefix() + cmd;
+            return msg.Text.StartsWith(_connections[msg.Sender.Platform].GetCommandPrefix() + cmd);
         }
 
-        private int ShowGroups(BotMessage msg, int state)
+        private int WhereCommand(BotMessage msg, int state)
         {
             if (_groupList.Count == 0)
             {
@@ -346,14 +348,14 @@ namespace LunarLabs.Bots
         private Dictionary<string, BotCommand> _commands = new Dictionary<string, BotCommand>();
         private Dictionary<long, string> _groupList = new Dictionary<long, string>();
 
-        public void RegisterCommand(string name, string description, Func<BotMessage, int, int> handler, Func<BotMessage, bool> filter = null)
+        public void RegisterCommand(string name, string description, Func<BotMessage, int, int> handler, Func<BotMessage, bool> filter = null,  bool allowShortcut = false)
         {
             if (string.IsNullOrEmpty(name))
             {
                 throw new ArgumentException("Invalid command name");
             }
 
-            var cmd = new BotCommand(name, description, handler, filter);
+            var cmd = new BotCommand(name, description, handler, filter, allowShortcut);
             _commands[name] = cmd;
         }
 
@@ -393,6 +395,8 @@ namespace LunarLabs.Bots
         {
             var text = msg.Text;
 
+            string queue = null;
+
             if (msg.Visibility == MessageVisibility.Public && !_groupList.ContainsKey(msg.Sender.ID))
             {
                 var content = $"{msg.Sender.Platform} => {msg.Sender.ID} / {msg.Sender.Handle}";
@@ -410,11 +414,18 @@ namespace LunarLabs.Bots
             else
             if (text.StartsWith(prefix))
             {
-                var key = text.Substring(prefix.Length);
+                var temp = text.Substring(prefix.Length).Split(new char[] { ' ' }, 2);
+
+                var key = temp[0];
 
                 if (_commands.ContainsKey(key))
                 {
                     cmd = _commands[key];
+
+                    if (temp.Length == 2 && cmd.AllowShortcut)
+                    {
+                        queue = temp[1];
+                    }
                 }
             }
 
@@ -423,8 +434,15 @@ namespace LunarLabs.Bots
                 if ( cmd.filter == null || cmd.filter(msg))
                 {
                     var state = _state.ContainsKey(msg.Sender.ID) ? _state[msg.Sender.ID] : 0;
+
+                    if (queue != null && state == 0)
+                    {
+                        msg.Text = queue;
+                        state = 1;
+                    }
+
                     state = cmd.handler(msg, state);
-                    if (state != 0)
+                    if (state > 0)
                     {
                         _state[msg.Sender.ID] = state;
                         _cmds[msg.Sender.ID] = cmd;
@@ -455,7 +473,6 @@ namespace LunarLabs.Bots
 
         protected virtual void OnMessage(BotMessage msg)
         {
-            ListCommands(msg);
         }
 
         public void ListCommands(BotMessage msg, string prefix = null)
