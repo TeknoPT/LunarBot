@@ -28,7 +28,7 @@ namespace LunarLabs.Bots
         Other
     }
 
-    public struct MessageSender
+    public class MessageSender
     {
         public BotPlatform Platform;
         public long ID;
@@ -82,7 +82,7 @@ namespace LunarLabs.Bots
         }
     }
 
-    public class Bot
+    public class ChatBot
     {
         private Dictionary<BotPlatform, BotConnection> _connections = new Dictionary<BotPlatform, BotConnection>();
         private ConcurrentQueue<BotMessage> _queue = new ConcurrentQueue<BotMessage>();
@@ -95,7 +95,7 @@ namespace LunarLabs.Bots
         private string _path;
         public string Path => _path;
 
-        public Bot(string path, Dictionary<BotPlatform, string> apiKeys)
+        public ChatBot(string path, Dictionary<BotPlatform, string> apiKeys)
         {
             path = path.Replace(@"\", "/");
 
@@ -267,7 +267,7 @@ namespace LunarLabs.Bots
             _delayedQueue.Enqueue(action);
         }
 
-        public void Start(Action idle = null)
+        public void Start()
         {
             foreach (var entry in _connections)
             {
@@ -278,7 +278,7 @@ namespace LunarLabs.Bots
                 }).Start();
             }
 
-            var lastIdle = DateTime.UtcNow;
+            var lastStorageWrite = DateTime.UtcNow;
 
             Console.WriteLine("Listening for messages...");
             _running = true;
@@ -316,7 +316,7 @@ namespace LunarLabs.Bots
                     }
                 }
 
-                var diff = DateTime.UtcNow - lastIdle;
+                var diff = DateTime.UtcNow - lastStorageWrite;
                 if (diff.TotalSeconds >= 5)
                 {
                     foreach (var entry in _storage)
@@ -329,19 +329,7 @@ namespace LunarLabs.Bots
                         }
                     }
 
-                    if (idle != null)
-                    {
-                        try
-                        {
-                            idle();
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine(e);
-                        }
-                    }
-
-                    lastIdle = DateTime.UtcNow;
+                    lastStorageWrite = DateTime.UtcNow;
                 }
             }
 
@@ -493,6 +481,15 @@ namespace LunarLabs.Bots
                 return;
             }
 
+            var lastSeen = GetLastSeen(msg.Sender);
+            var diff = (DateTime.UtcNow - lastSeen).TotalHours;
+            if (diff > 1)
+            {
+                var times = FindStorage("times");
+                var timestamp = DateTime.UtcNow.Ticks;
+                times.Set(msg.Sender, timestamp.ToString());
+            }
+
             OnMessage(msg);
         }
 
@@ -602,5 +599,20 @@ namespace LunarLabs.Bots
             var connection = _connections[platform];
             return connection.Expand(ID);
         }
+
+        public DateTime GetLastSeen(MessageSender target)
+        {
+            var times = FindStorage("times", false);
+            if (times != null && times.Contains(target))
+            {
+                var ticks = long.Parse(times.Get(target));
+                return new DateTime(ticks);
+            }
+            else
+            {
+                return DateTime.MinValue;
+            }
+        }
+
     }
 }
