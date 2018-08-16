@@ -86,31 +86,21 @@ namespace LunarLabs.Bots
     {
         private Dictionary<BotPlatform, BotConnection> _connections = new Dictionary<BotPlatform, BotConnection>();
         private ConcurrentQueue<BotMessage> _queue = new ConcurrentQueue<BotMessage>();
-        private Dictionary<string, BotStorage> _storage = new Dictionary<string, BotStorage>();
 
-        public BotStorage Handles => FindStorage("handles");
-        public BotStorage Admins => FindStorage("admins");
+        public Collection Handles => Storage.FindCollection("handles");
+        public Collection Admins => Storage.FindCollection("admins");
+
+        private Collection Times => Storage.FindCollection("times");
+
+        public Storage Storage { get; private set; }
 
         private bool _running;
         private string _path;
         public string Path => _path;
 
-        public ChatBot(string path, Dictionary<BotPlatform, string> apiKeys)
+        public ChatBot(Storage storage, Dictionary<BotPlatform, string> apiKeys)
         {
-            path = path.Replace(@"\", "/");
-
-            if (!path.EndsWith("/"))
-            {
-                path = path + "/";
-            }
-
-            if (!Directory.Exists(path))
-            {
-                Console.WriteLine($"Creating directory {path}...");
-                Directory.CreateDirectory(path);
-            }
-
-            this._path = path;
+            this.Storage = storage;
 
             foreach (var entry in apiKeys)
             {
@@ -239,27 +229,6 @@ namespace LunarLabs.Bots
             return 0;
         }
 
-        public BotStorage FindStorage(string name, bool canCreate = true)
-        {
-            name = name.ToLower();
-
-            if (_storage.ContainsKey(name)) 
-            {
-                return _storage[name];
-            }
-
-            var result = new BotStorage(_path, name);
-            var loaded = result.Load();
-
-            if (!loaded && !canCreate)
-            {
-                return null;
-            }
-
-            _storage[name] = result;
-            return result;
-        }
-
         private ConcurrentQueue<Action> _delayedQueue = new ConcurrentQueue<Action>();
 
         public void RunLater(Action action)
@@ -319,16 +288,7 @@ namespace LunarLabs.Bots
                 var diff = DateTime.UtcNow - lastStorageWrite;
                 if (diff.TotalSeconds >= 5)
                 {
-                    foreach (var entry in _storage)
-                    {
-                        var storage = entry.Value;
-                        if (storage.Modified)
-                        {
-                            Console.WriteLine($"Saving storage for {storage.Name}...");
-                            storage.Save();
-                        }
-                    }
-
+                    this.Storage.Synchronize();
                     lastStorageWrite = DateTime.UtcNow;
                 }
             }
@@ -481,16 +441,16 @@ namespace LunarLabs.Bots
                 return;
             }
 
+            OnMessage(msg);
+
+            // update last seen
             var lastSeen = GetLastSeen(msg.Sender);
             var diff = (DateTime.UtcNow - lastSeen).TotalHours;
             if (diff > 1)
             {
-                var times = FindStorage("times");
                 var timestamp = DateTime.UtcNow.Ticks;
-                times.Set(msg.Sender, timestamp.ToString());
+                Times.Set(msg.Sender, timestamp.ToString());
             }
-
-            OnMessage(msg);
         }
 
         protected virtual void OnMessage(BotMessage msg)
@@ -602,7 +562,7 @@ namespace LunarLabs.Bots
 
         public DateTime GetLastSeen(MessageSender target)
         {
-            var times = FindStorage("times", false);
+            var times = Storage.FindCollection("times", false);
             if (times != null && times.Contains(target))
             {
                 var ticks = long.Parse(times.Get(target));

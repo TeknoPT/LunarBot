@@ -4,12 +4,67 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LunarLabs.Bots
 {
-    public class BotStorage
+    public class Storage
+    {
+        private string _path;
+        private Dictionary<string, Collection> _storage = new Dictionary<string, Collection>();
+
+        public Storage(string path)
+        {
+            path = path.Replace(@"\", "/");
+
+            if (!path.EndsWith("/"))
+            {
+                path = path + "/";
+            }
+
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+
+            this._path = path;
+        }
+
+        public void Synchronize()
+        {
+            foreach (var entry in _storage)
+            {
+                var storage = entry.Value;
+                if (storage.Modified)
+                {
+                    Console.WriteLine($"Saving storage for {storage.Name}...");
+                    storage.Save();
+                }
+            }
+        }
+
+        public Collection FindCollection(string name, bool canCreate = true)
+        {
+            name = name.ToLower();
+
+            if (_storage.ContainsKey(name))
+            {
+                return _storage[name];
+            }
+
+            var result = new Collection(_path, name);
+            var loaded = result.Load();
+
+            if (!loaded && !canCreate)
+            {
+                return null;
+            }
+
+            _storage[name] = result;
+            return result;
+        }
+    }
+
+    public class Collection
     {
         public readonly string Name;
         public readonly string FileName;
@@ -18,7 +73,7 @@ namespace LunarLabs.Bots
 
         private Dictionary<string, List<string>> _keystore = new Dictionary<string, List<string>>();
 
-        public BotStorage(string path, string name)
+        public Collection(string path, string name)
         {
             this.Name = name;
             this.FileName = path + name + ".xml";

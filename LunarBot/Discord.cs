@@ -6,7 +6,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 
-//https://discordapp.com/oauth2/authorize?&client_id=YOUR_CLIENT_ID_HERE&scope=bot&permissions=0
+//TO CREATE A BOT => https://discordapp.com/developers/applications/
+//TO MAKE BOT JOIN SERVER => https://discordapp.com/oauth2/authorize?&client_id=YOUR_CLIENT_ID_HERE&scope=bot&permissions=0
 namespace LunarLabs.Bots
 {
     public class DiscordConnection : BotConnection
