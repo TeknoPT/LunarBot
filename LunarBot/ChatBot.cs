@@ -162,8 +162,14 @@ namespace LunarLabs.Bots
 
                     if (long.TryParse(msg.Text, out ID))
                     {
-                        var user = Expand(msg.Sender.Platform, ID);
-                        Speak(msg.Sender, $"ID {ID} belongs to user with handle @{user.Handle}");
+                        try {
+                            var user = Expand(msg.Sender.Platform, ID);
+                            Speak(msg.Sender, $"ID {ID} belongs to user with handle @{user.Handle}");
+                        }
+                        catch
+                        {
+                            Speak(msg.Sender, $"Could not find user with ID {ID}");
+                        }
                     }
                     else
                     {
@@ -404,10 +410,9 @@ namespace LunarLabs.Bots
 
             if (cmd !=null)
             {
-                if ( cmd.filter == null || cmd.filter(msg))
+                var state = _state.ContainsKey(msg.Sender.ID) ? _state[msg.Sender.ID] : 0;
+                if (state !=0 || (cmd.filter == null || cmd.filter(msg)))
                 {
-                    var state = _state.ContainsKey(msg.Sender.ID) ? _state[msg.Sender.ID] : 0;
-
                     if (queue != null && state == 0)
                     {
                         msg.Text = queue;
