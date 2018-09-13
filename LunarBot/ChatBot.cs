@@ -120,10 +120,10 @@ namespace LunarLabs.Bots
             }
 
             RegisterCommand("me", "Shows your ID", ShowMe, (msg) => IsCommand(msg, "me"));
-            RegisterCommand("whois", "Lookups someone by ID", ShowWhoIs, (msg) => IsCommand(msg, "whois"));
+            RegisterCommand("whois", "Lookups someone by ID", ShowWhoIs, (msg) => IsCommand(msg, "whois"), true);
             RegisterCommand("where", "Shows list of public locations", WhereCommand, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender));
-            RegisterCommand("addadmin", "Promotes someone to admin", PromoteAdmin, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender));
-            //RegisterCommand("removeadmin", "Demotes someone from admin", DemoteAdmin, (msg) => msg.Visibility ==  MessageVisibility.Private && IsAdmin(msg.Sender));
+            RegisterCommand("addadmin", "Promotes someone to admin", PromoteAdmin, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender), true);
+            //RegisterCommand("removeadmin", "Demotes someone from admin", DemoteAdmin, (msg) => msg.Visibility ==  MessageVisibility.Private && IsAdmin(msg.Sender), true);
         }
 
         public bool IsCommand(BotMessage msg, string cmd)
