@@ -26,10 +26,8 @@ namespace LunarLabs.Bots
 
         private Dictionary<ulong, ISocketMessageChannel> _channels = new Dictionary<ulong, ISocketMessageChannel>();
 
-        private IMessageChannel GetChannel(long target)
+        private IMessageChannel GetChannel(ulong id)
         {
-            var id = (ulong)target;
-
             var channel = _client.GetChannel(id) as IMessageChannel;
 
             if (channel == null)
@@ -47,10 +45,12 @@ namespace LunarLabs.Bots
             return channel;
         }
 
-        public async Task Send(long target, string text)
+        public async Task Send(object target, string text)
         {
-            var dest = GetChannel(target);
-            await dest.SendMessageAsync(text);
+            var id = (ulong)target;
+            var socket = GetChannel(id);
+
+            await socket.SendMessageAsync(text);
         }
 
         public void Start(ConcurrentQueue<BotMessage> queue)
@@ -91,6 +91,9 @@ namespace LunarLabs.Bots
                 msg.Sender = new MessageSender() { ID = (long)sourceID, Handle = sourceHandle, Name = sourceName, Platform = BotPlatform.Discord};
                 msg.File = null;
 
+                msg.channelID = src.Channel.Id;
+                msg.msgID = (ulong)src.Id;
+
                 _channels[sourceID] = src.Channel;
 
                 _queue.Enqueue(msg);
@@ -106,9 +109,10 @@ namespace LunarLabs.Bots
             return "!";
         }
 
-        public void SendFile(long target, byte[] bytes, string fileName)
+        public void SendFile(object target, byte[] bytes, string fileName)
         {
-            var socket = GetChannel(target);
+            var id = (ulong)target;
+            var socket = GetChannel(id);
 
             using (var stream = new MemoryStream(bytes))
             {
@@ -135,6 +139,17 @@ namespace LunarLabs.Bots
             }
 
             throw new Exception("Can't find Discord ID " + targetId);
+        }
+
+        public void Delete(BotMessage msg)
+        {
+            if (msg != null)
+            {
+                var id = (ulong)msg.channelID;
+                var socket = GetChannel(id);
+
+                socket.DeleteMessagesAsync(new ulong[] { (ulong)msg.msgID });
+            }
         }
 
     }

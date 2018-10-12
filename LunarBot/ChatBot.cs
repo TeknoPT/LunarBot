@@ -25,6 +25,8 @@ namespace LunarLabs.Bots
         Text,
         File,
         Sticker,
+        Join,
+        Leave,
         Other
     }
 
@@ -47,6 +49,8 @@ namespace LunarLabs.Bots
 
     public class BotMessage
     {
+        public object msgID;
+        public object channelID;
         public MessageVisibility Visibility;
         public MessageKind Kind;
         public string Text;        
@@ -59,9 +63,10 @@ namespace LunarLabs.Bots
         string GetCommandPrefix();
         void Start(ConcurrentQueue<BotMessage> queue);
         void Stop();
-        Task Send(long target, string text);
-        void SendFile(long target, byte[] bytes, string fileName);
-        MessageSender Expand(long ID);
+        Task Send(object target, string text);
+        void SendFile(object target, byte[] bytes, string fileName);
+        MessageSender Expand(long userID);
+        void Delete(BotMessage msg);
     }
 
     public class BotCommand

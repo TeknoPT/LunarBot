@@ -58,6 +58,7 @@ namespace LunarLabs.Bots
                     case MessageType.Text: kind = MessageKind.Text; break;
                     case MessageType.Document: kind = MessageKind.File; break;
                     case MessageType.Photo: kind = MessageKind.File; break;
+                    case MessageType.ChatMembersAdded: kind = MessageKind.Join; break;
 
                     default: kind = MessageKind.Other; break;
 
@@ -66,12 +67,32 @@ namespace LunarLabs.Bots
                 var msg = new BotMessage();
                 msg.Visibility = src.Chat.Type == ChatType.Private ? MessageVisibility.Private : MessageVisibility.Public;
                 msg.Kind = kind;
-                msg.Text = kind == MessageKind.Text ? src.Text: "";
                 msg.Sender = FromChat(src.Chat);
 
-                MessageFile file;
+                string text = "";
+                MessageFile file = null;
+
                 switch (src.Type)
                 {
+                    case MessageType.ChatMembersAdded:
+                        {
+                            if (src.NewChatMembers!=null)
+                            {
+                                foreach (var member in src.NewChatMembers)
+                                {
+                                    if (text.Length > 0)
+                                    {
+                                        text += ", ";
+                                    }
+
+                                    text += Combine(member.FirstName, member.LastName);
+                                }
+                            }
+
+                            text = "Joined: " + text;
+                            return;
+                        }
+
                     case MessageType.Photo:
                         {
                             file = new MessageFile();
@@ -96,10 +117,19 @@ namespace LunarLabs.Bots
                             break;
                         }
 
+                    case MessageType.Text:
+                        {
+                            text = src.Text;
+                            break;
+                        }
+
                     default: file = null; break;
                 }
 
                 msg.File = file;
+                msg.Text = text;
+                msg.channelID = src.Chat.Id;
+                msg.msgID = src.MessageId;
 
                 _queue.Enqueue(msg);
             }
@@ -129,13 +159,14 @@ namespace LunarLabs.Bots
             return $"{firstName} {lastName}";
         }
 
-        public async Task Send(long target, string text)
+        public async Task Send(object target, string text)
         {
-            await _client.SendChatActionAsync(target, ChatAction.Typing);
+            var id = (long)target;
+            await _client.SendChatActionAsync(id, ChatAction.Typing);
 
             await Task.Delay(1500); // simulate longer running task
 
-            await _client.SendTextMessageAsync(target, text, ParseMode.Markdown);
+            await _client.SendTextMessageAsync(id, text, ParseMode.Markdown);
         }
 
         public string GetCommandPrefix()
@@ -143,19 +174,28 @@ namespace LunarLabs.Bots
             return "/";
         }
 
-        public void SendFile(long target, byte[] bytes, string fileName)
+        public void SendFile(object target, byte[] bytes, string fileName)
         {
+            var id = (long)target;
             using (var stream = new MemoryStream(bytes))
             {
                 var document = new Telegram.Bot.Types.InputFiles.InputOnlineFile(stream, fileName);
-                _client.SendDocumentAsync(target, document).Wait();
+                _client.SendDocumentAsync(id, document).Wait();
             }
         }
 
-        public MessageSender Expand(long ID)
+        public MessageSender Expand(long userID)
         {
-            var chat = _client.GetChatAsync(ID).GetAwaiter().GetResult();
+            var chat = _client.GetChatAsync(userID).GetAwaiter().GetResult();
             return FromChat(chat);
+        }
+
+        public void Delete(BotMessage msg)
+        {
+            if (msg != null)
+            {
+                _client.DeleteMessageAsync((long)msg.channelID, (int)msg.msgID);
+            }
         }
     }
 }
