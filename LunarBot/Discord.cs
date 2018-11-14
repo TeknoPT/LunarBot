@@ -93,6 +93,7 @@ namespace LunarLabs.Bots
 
                 msg.channelID = src.Channel.Id;
                 msg.msgID = (ulong)src.Id;
+                msg.platform = BotPlatform.Discord;
 
                 _channels[sourceID] = src.Channel;
 

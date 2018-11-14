@@ -130,6 +130,7 @@ namespace LunarLabs.Bots
                 msg.Text = text;
                 msg.channelID = src.Chat.Id;
                 msg.msgID = src.MessageId;
+                msg.platform = BotPlatform.Telegram;
 
                 _queue.Enqueue(msg);
             }

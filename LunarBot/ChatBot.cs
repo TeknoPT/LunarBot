@@ -51,6 +51,7 @@ namespace LunarLabs.Bots
     {
         public object msgID;
         public object channelID;
+        public BotPlatform platform;
         public MessageVisibility Visibility;
         public MessageKind Kind;
         public string Text;        
@@ -521,6 +522,12 @@ namespace LunarLabs.Bots
 
                 connection.Send(target, line).Wait();
             }
+        }
+
+        public void Delete(BotMessage msg)
+        {
+            var connection = _connections[msg.platform];
+            connection.Delete(msg);
         }
 
         public void SendFile(BotPlatform platform, long target, byte[] content, string fileName)
