@@ -47,7 +47,7 @@ namespace LunarLabs.Bots
 
         public async Task Send(object target, string text)
         {
-            var id = (ulong)target;
+            var id = ulong.Parse(target.ToString());
             var socket = GetChannel(id);
 
             await socket.SendMessageAsync(text);
