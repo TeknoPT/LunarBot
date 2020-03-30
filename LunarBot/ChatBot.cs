@@ -125,6 +125,7 @@ namespace LunarLabs.Bots
                 }
             }
 
+            RegisterCommand("help", "Shows this list", (msg, state) => { ListCommands(msg); return 0; });
             RegisterCommand("me", "Shows your ID", ShowMe, (msg) => IsCommand(msg, "me"));
             RegisterCommand("whois", "Lookups someone by ID", ShowWhoIs, (msg) => IsCommand(msg, "whois"), true);
             RegisterCommand("where", "Shows list of public locations", WhereCommand, (msg) => msg.Visibility == MessageVisibility.Private && IsAdmin(msg.Sender));
@@ -475,6 +476,11 @@ namespace LunarLabs.Bots
             var sb = new StringBuilder();
             foreach (var entry in _commands.Values)
             {
+                if (entry.name == "help")
+                {
+                    continue;
+                }
+
                 var visible = entry.filter != null ? entry.filter(msg) : true;
 
                 if (visible)
