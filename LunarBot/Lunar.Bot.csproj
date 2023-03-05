@@ -5,7 +5,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <AssemblyVersion>0.1.9.0</AssemblyVersion>
     <FileVersion>0.1.9.0</FileVersion>
-    <Version>0.2.1</Version>
+    <Version>0.2.2</Version>
     <Description>Makes it easier to create Telegram and Discord bots</Description>
     <Copyright>Sergio Flores</Copyright>
     <PackageProjectUrl>https://github.com/Relfos/LunarBot</PackageProjectUrl>
@@ -17,8 +17,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Discord.Net.Core" Version="1.0.2" />
-    <PackageReference Include="Discord.Net.WebSocket" Version="1.0.2" />
+    <PackageReference Include="Discord.Net.Core" Version="3.9.0" />
+    <PackageReference Include="Discord.Net.WebSocket" Version="3.9.0" />
     <PackageReference Include="LunarLabs.Parser" Version="1.4.1" />
     <PackageReference Include="Telegram.Bot" Version="14.10.0" />
   </ItemGroup>

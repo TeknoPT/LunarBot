@@ -39,7 +39,7 @@ namespace LunarLabs.Bots
                     return null;
                 }
 
-                channel = (IMessageChannel)(user.GetOrCreateDMChannelAsync().GetAwaiter().GetResult());
+                channel = (IMessageChannel)(user.CreateDMChannelAsync().GetAwaiter().GetResult());
             }
 
             return channel;
@@ -149,7 +149,7 @@ namespace LunarLabs.Bots
                 var id = (ulong)msg.channelID;
                 var socket = GetChannel(id);
 
-                socket.DeleteMessagesAsync(new ulong[] { (ulong)msg.msgID });
+                socket.DeleteMessageAsync((ulong)msg.msgID);
             }
         }
 
