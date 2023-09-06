@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <AssemblyVersion>0.1.9.0</AssemblyVersion>
     <FileVersion>0.1.9.0</FileVersion>
@@ -14,17 +13,22 @@
     <PackageTags>bot chat discord telegram</PackageTags>
     <RootNamespace>LunarLabs.Bots</RootNamespace>
     <AssemblyName>LunarLabs.Bots</AssemblyName>
+    <TargetFrameworks>net6.0</TargetFrameworks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Properties\**" />
+    <EmbeddedResource Remove="Properties\**" />
+    <None Remove="Properties\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Discord.Net.Core" Version="3.9.0" />
     <PackageReference Include="Discord.Net.WebSocket" Version="3.9.0" />
-    <PackageReference Include="LunarLabs.Parser" Version="1.4.1" />
+    <PackageReference Include="LunarLabs.Parser" Version="1.5.5" />
+    <PackageReference Include="LunarLabs.Server" Version="1.5.11" />
     <PackageReference Include="Telegram.Bot" Version="14.10.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Properties\" />
+    <PackageReference Include="Betalgo.OpenAI" Version="6.8.5" />
   </ItemGroup>
 
 </Project>
