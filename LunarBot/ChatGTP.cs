@@ -335,19 +335,6 @@ namespace LunarLabs.Bots
                 var context = GetContext(request);
                 return templateEngine.Render(context, "convo");
             });
-            
-            server.Get("/convo/last/{chat_id}", (request) =>
-            {
-                var chat_id = GetChatID(request);
-                var context = GetContext(request);
-                var lastConvo = FindConvo(chat_id).Last();
-                context["chat_last"] = lastConvo;
-                context["chat"] = BeautifyConvo(new List<ChatEntry>()
-                {
-                    lastConvo
-                });
-                return templateEngine.Render(context, "convoLast");
-            });
         }
 
         private string FilterCodeTags(string input, ref bool insideCode)
@@ -558,13 +545,6 @@ namespace LunarLabs.Bots
             Console.WriteLine("Got ChatGTP answer...");
             if (completionResult.Successful)
             {
-                var lines = new List<string>();
-                lines.Add("specky:");
-                lines.Add("Hello Souldier, what do you want to build today?");
-                lines.Add(CHAT_BREAK);
-                lines.Add("user:");
-                lines.Add(questionText);
-                lines.Add(CHAT_BREAK);
                 var answers = completionResult.Choices.Select(x => x.Message.Content).ToArray();
 
                 foreach (var answer in answers)  Console.WriteLine(answer);
