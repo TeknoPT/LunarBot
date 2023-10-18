@@ -14,14 +14,68 @@ using System.IO;
 
 namespace LunarLabs.Bots
 {
+
+    public struct ChatOption
+    {
+        public readonly string id;
+        public readonly string caption;
+
+        public ChatOption(string id, string caption)
+        {
+            this.id = id;
+            this.caption = caption;
+        }
+    }
+
     public struct ChatEntry
     {
-        public readonly bool isSpecky;
+        public readonly bool isAssistant;
         public readonly string text;
 
-        public ChatEntry(bool isSpecky, string text)
+        public readonly ChatOption[] options;
+
+        public ChatEntry(bool isAssistant, string text, ChatOption[] options)
         {
-            this.isSpecky = isSpecky;
+            this.isAssistant = isAssistant;
+            this.text = text;
+            this.options = options;
+        }
+
+        public ChatEntry(bool isAssistant, string text)
+        {
+            this.isAssistant = isAssistant;
+            this.options = null;
+
+            var multChoiceTag = "1)";
+
+            if (isAssistant)
+            {
+                var idx = text.IndexOf(multChoiceTag);
+                if (idx >= 0)
+                {
+                    idx--; // catch the previous newline
+                    var optionText = text.Substring(idx).TrimStart();
+                    text = text.Substring(0, idx);
+
+                    var lines = optionText.Split("\n");
+                    var options = new List<ChatOption>();
+                    foreach (var line in lines)
+                    {
+                        var tmp = line.Split(')', 2);
+
+                        if (tmp.Length == 2)
+                        {
+                            var id = tmp[0];
+                            var caption = tmp[1].Trim();
+
+                            options.Add(new ChatOption(id, caption));
+                        }
+                    }
+
+                    this.options = options.ToArray();
+                }
+            }
+
             this.text = text;
         }
 
@@ -31,30 +85,186 @@ namespace LunarLabs.Bots
         }
     }
 
-    public class ChatGTPBot
-    {   
-        private string apiKey;
 
-        private string chatLogPath;
+    public abstract class SmartBot
+    {
+        public const string CHAT_BREAK = "####";
 
-        private OpenAIService gpt3;
-        private string assistantText;
+        public readonly int chat_id;
 
-        private Dictionary<int, List<ChatEntry>> convos = new Dictionary<int, List<ChatEntry>>();
-        private HashSet<int> pending = new HashSet<int>();
+        public readonly string rootPath;
+        public readonly string chatLogPath;
 
-        public ChatGTPBot(string path, string apiKey)
+        public List<ChatEntry> convo = new List<ChatEntry>();
+
+        public string Memory { get; private set; } 
+
+        public SmartBot(int chat_id, string path)
         {
-            if (!path.EndsWith('/'))
-            {
-                path += "/";
-            }
+            Memory = string.Empty;
 
+            this.chat_id = chat_id;
+
+            this.rootPath = path;
             chatLogPath = path + "Chatlogs/";
             if (!Directory.Exists(chatLogPath))
             {
                 Directory.CreateDirectory(chatLogPath);
             }
+
+            var fileName = GetChatLogPath();
+
+            if (File.Exists(fileName))
+            {
+                var lines = File.ReadAllLines(fileName);
+
+
+                var sb = new StringBuilder();
+
+                bool waitingForUserType = true;
+                bool isAssistant = false;
+
+                foreach (var line in lines)
+                {
+                    if (line.StartsWith(CHAT_BREAK))
+                    {
+                        if (sb.Length > 0)
+                        {
+                            convo.Add(new ChatEntry(isAssistant, sb.ToString()));
+                            sb.Clear();
+                        }
+
+                        waitingForUserType = true;
+                    }
+                    else
+                    if (waitingForUserType)
+                    {
+                        isAssistant = line.StartsWith("ai:");
+                        waitingForUserType = false;
+                    }
+                    else
+                    {
+                        sb.AppendLine(line);
+                    }
+                }
+
+                if (sb.Length > 0)
+                {
+                    convo.Add(new ChatEntry(isAssistant, sb.ToString()));
+                }
+            }
+        }
+
+        public void AddToMemory(string text)
+        {
+            if (!string.IsNullOrEmpty(Memory))
+            {
+                text = "\n" + text;
+            }
+
+            Memory += text;
+        }
+
+        protected virtual string FormatAnswer(string answer) => answer;
+
+        public void AddAnswerToConvo(string question, params string[] answers)
+        {
+            if (!string.IsNullOrEmpty(question))
+            {
+                convo.Add(new ChatEntry(false, question));
+            }
+
+            foreach (var choice in answers)
+            {
+                var answer = FormatAnswer(choice);
+                convo.Add(new ChatEntry(true, answer));
+            }
+        }
+
+        public abstract string GetRules();
+        public virtual string GetPreAnswer(ref string questionText) => null;
+
+        public string GetChatLogPath()
+        {
+            return chatLogPath + chat_id + ".txt";
+        }
+
+        public virtual void SaveHistory()
+        {
+            var lines = new List<string>();
+
+            foreach (var entry in convo)
+            {
+                lines.Add(entry.isAssistant ? "ai:": "user:");
+                lines.Add(entry.text);
+
+                if (entry.options != null)
+                {
+                    foreach (var option in entry.options)
+                    {
+                        lines.Add($"{option.id}) {option.caption}");
+                    }
+                }
+                lines.Add(CHAT_BREAK);
+            }
+
+            var fileName = GetChatLogPath();
+            File.WriteAllLines(fileName, lines);
+        }
+    }
+
+    public class SimpleGPTBot: SmartBot
+    {
+        private string assistantText;
+
+        public SimpleGPTBot(int chat_id, string path) : base(chat_id, path) 
+        { 
+
+            assistantText = File.ReadAllText(path + "assistant.txt");
+
+            if (string.IsNullOrEmpty(assistantText))
+            {
+                throw new Exception("Could not load assistant data");
+            }
+        }
+
+        public override string GetRules() => assistantText;
+    }
+
+    public class ChatGTPBotPlugin
+    {   
+        private string apiKey;
+
+        private string rootPath;
+
+        private OpenAIService gpt3;
+
+        private Dictionary<int, SmartBot> instances = new Dictionary<int, SmartBot>();
+        private HashSet<int> pending = new HashSet<int>();
+
+        private Func<int, string, SmartBot> _botInit;
+
+        public static ChatGTPBotPlugin Initialize<T>(string path, string apiKey) where T : SmartBot
+        {
+            Func<int, string, SmartBot> activator = (id, path) =>
+            {
+                var bot = (T)Activator.CreateInstance(typeof(T), id, path);
+                return bot;
+            };
+
+            return new ChatGTPBotPlugin(activator, path, apiKey);
+        }
+
+        private ChatGTPBotPlugin(Func<int, string, SmartBot> botActivator, string path, string apiKey)
+        {
+            _botInit = botActivator;
+
+            if (!path.EndsWith('/'))
+            {
+                path += "/";
+            }
+
+            rootPath = path;
 
             if (string.IsNullOrEmpty(apiKey))
             {
@@ -70,13 +280,6 @@ namespace LunarLabs.Bots
             {
                 ApiKey = apiKey
             });
-
-            assistantText = File.ReadAllText(path + "assistant.txt");
-
-            if (string.IsNullOrEmpty(assistantText))
-            {
-                throw new Exception("Could not load assistant data");
-            }
         }
 
         public void Install(HTTPServer server, string entryPath = "/")
@@ -92,11 +295,18 @@ namespace LunarLabs.Bots
             {
                 var id = request.session.GetInt("chat_id");
 
-                if (id == 0)
+                if (id <= 0)
                 {
                     id = GenerateUserID();
                 }
 
+                return HTTPResponse.Redirect(entryPath + id);
+            });
+
+            server.Get("/new", (request) =>
+            {
+                var id = GenerateUserID();
+                request.session.SetInt("chat_id", id);
                 return HTTPResponse.Redirect(entryPath + id);
             });
 
@@ -118,12 +328,7 @@ namespace LunarLabs.Bots
 
                 var chat_id = GetChatID(request);
 
-                List<ChatEntry> convo = FindConvo(chat_id);
-                lock (convos)
-                {
-                    convo.Add(new ChatEntry(false, text));
-                }
-
+                var bot = FindBot(chat_id);
                 //var result = Task.Run(() => DoChatRequest(userID, text)).Result; 
                 DoChatRequest(chat_id, text);
 
@@ -131,8 +336,6 @@ namespace LunarLabs.Bots
                 return templateEngine.Render(context, "convo");
             });
         }
-
-        const string CHAT_BREAK = "####";
 
         private string FilterCodeTags(string input, ref bool insideCode)
         {
@@ -184,105 +387,101 @@ namespace LunarLabs.Bots
         {
             var result = new List<ChatEntry>();
 
+            int idx = -1;
+
             bool insideCode = false;
             foreach (var entry in convo)
             {
-                var wasInsideCode = insideCode;
+                idx++;
 
-                var lines = entry.text.Split('\n');
+                string output;
 
-                var sb = new StringBuilder();
+                int optionID;
 
-                foreach (var line in lines)
+                if (idx > 0 && int.TryParse(entry.text, out optionID))
                 {
-                    var text = FilterCodeTags(line, ref insideCode);
+                    var prev = convo[idx - 1];
+                    optionID--;
+                    output = prev.options[optionID].caption;
+                }
+                else
+                {
+                    var wasInsideCode = insideCode;
 
-                    sb.Append(text);
+                    var lines = entry.text.Split('\n');
 
-                    if (insideCode)
+                    var sb = new StringBuilder();
+
+                    foreach (var line in lines)
                     {
-                        sb.Append("\n");
+                        var text = FilterCodeTags(line, ref insideCode);
+
+                        sb.Append(text);
+
+                        if (insideCode)
+                        {
+                            sb.Append("\n");
+                        }
+                        else
+                        {
+                            sb.Append("<br>");
+                        }
                     }
-                    else
-                    {
-                        sb.Append("<br>");
-                    }
+
+                    output = sb.ToString().Trim(); //.Replace("<br><br>", "<br>");
                 }
 
-                var output = sb.ToString(); //.Replace("<br><br>", "<br>");
-                result.Add(new ChatEntry(entry.isSpecky, output));
+                result.Add(new ChatEntry(entry.isAssistant, output, entry.options));
             }
 
             return result;
         }
 
-        private List<ChatEntry> FindConvo(int chat_id)
+        private SmartBot FindBot(int chat_id, bool createIfNotExist = true)
         {
-            List<ChatEntry> convo;
+            SmartBot bot;
 
-            lock (convos)
+            lock (instances)
             {
-                if (convos.ContainsKey(chat_id))
+                if (instances.ContainsKey(chat_id))
                 {
-                    convo = convos[chat_id];
+                    bot = instances[chat_id];
                 }
                 else
-                if (ChatExists(chat_id))
+                if (createIfNotExist)
                 {
-                    var fileName = GetChatLogPath(chat_id);
-                    var lines = File.ReadAllLines(fileName);
+                    bot = _botInit(chat_id, rootPath);
 
-                    convo = new List<ChatEntry>();
-
-                    var sb = new StringBuilder();
-
-                    bool waitingForUserType = true;
-                    bool isSpecky = false;
-
-                    foreach (var line in lines)
+                    if (bot.convo.Any(x => !x.isAssistant) || createIfNotExist)
                     {
-                        if (line.StartsWith(CHAT_BREAK))
-                        {
-                            if (sb.Length > 0)
-                            {
-                                convo.Add(new ChatEntry(isSpecky, sb.ToString()));
-                                sb.Clear();
-                            }
-
-                            waitingForUserType = true;
-                        }
-                        else
-                        if (waitingForUserType)
-                        {
-                            isSpecky = line.StartsWith("specky:");
-                            waitingForUserType = false;
-                        }
-                        else
-                        {
-                            sb.AppendLine(line);
-                        }
+                        instances[chat_id] = bot;
                     }
-
-                    if (sb.Length > 0)
+                    else
                     {
-                        convo.Add(new ChatEntry(isSpecky, sb.ToString()));
+                        bot = null;
                     }
-
-                    convos[chat_id] = convo;
                 }
-                else
+                else 
                 {
-                    convo = new List<ChatEntry>();
-                    convo.Add(new ChatEntry(true, "Hello Souldier, what do you want to build today?"));
-                    convos[chat_id] = convo;
+                    bot = null;
                 }
             }
 
-            return convo;
+            return bot;
         }
 
         private async Task<bool> DoChatRequest(int chat_id, string questionText)
         {
+            var bot = FindBot(chat_id);
+
+            var quickAnswer = bot.GetPreAnswer(ref questionText);
+
+            if (!string.IsNullOrEmpty(quickAnswer))
+            {
+                bot.AddAnswerToConvo(questionText, quickAnswer);
+                return true;
+            }
+
             Console.WriteLine($"CHATGPT.beginRequest({chat_id})");
 
             lock (pending)
@@ -293,20 +492,39 @@ namespace LunarLabs.Bots
                 }
 
                 pending.Add(chat_id);
+
+                bot.AddAnswerToConvo(questionText);
             }
 
             IList<ChatMessage> messages = new List<ChatMessage>();
 
-            messages.Add(new ChatMessage("system", assistantText));
+            var botRules = bot.GetRules();
 
-            List<ChatEntry> convo = FindConvo(chat_id);
-
-            foreach (var entry in convo)
+            if (!string.IsNullOrEmpty(bot.Memory))
             {
-                string role = entry.isSpecky ? "assistant" : "user";
+                if (string.IsNullOrEmpty(botRules))
+                {
+                    botRules = bot.Memory;
+                }
+                else
+                {
+                    botRules += "\n" + bot.Memory;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(botRules))
+            {
+                messages.Add(new ChatMessage("system", botRules));
+            }
+
+            foreach (var entry in bot.convo)
+            {
+                string role = entry.isAssistant ? "assistant" : "user";
 
                 messages.Add(new ChatMessage(role, entry.text));
             }
+
+            messages.Add(new ChatMessage("user", questionText));
 
             // https://platform.openai.com/docs/models/gpt-3-5
             LimitTokens(messages, 4000);
@@ -319,7 +537,7 @@ namespace LunarLabs.Bots
                                         Messages = messages,
                                         Model = Models.ChatGpt3_5Turbo,
                                         Temperature = 0.5f,
-                                        MaxTokens = 500,
+                                        MaxTokens = 2500,
                                         N = 1,
                                     });
 
@@ -327,26 +545,12 @@ namespace LunarLabs.Bots
             Console.WriteLine("Got ChatGTP answer...");
             if (completionResult.Successful)
             {
-                var lines = new List<string>();
-                lines.Add("user:");
-                lines.Add(questionText);
-                lines.Add(CHAT_BREAK);
+                var answers = completionResult.Choices.Select(x => x.Message.Content).ToArray();
 
-                lines.Add("specky:");
-                foreach (var choice in completionResult.Choices)
-                {
-                    var answer = choice.Message.Content;
+                foreach (var answer in answers)  Console.WriteLine(answer);
 
-                    answer = answer.Replace("```csharp", "```");
-
-                    lines.Add(answer);
-                    convo.Add(new ChatEntry(true, answer));
-                }
-                lines.Add(CHAT_BREAK);
-
-                var fileName = GetChatLogPath(chat_id);
-
-                File.AppendAllLines(fileName, lines);
+                bot.AddAnswerToConvo(null, answers);
+                bot.SaveHistory();
             }
             else
             {
@@ -410,7 +614,8 @@ namespace LunarLabs.Bots
             var json = new StringBuilder();
             json.Append('[');
 
-            var entries = FindConvo(chat_id);
+            var bot = FindBot(chat_id);
+            var entries = bot.convo;
             foreach (var entry in entries)
             {
                 json.AppendLine($"\"{entry.text}\"");
@@ -420,31 +625,21 @@ namespace LunarLabs.Bots
             return json.ToString();
         }
 
-        private string GetChatLogPath(int chatID)
-        {
-            return chatLogPath + chatID + ".txt";
-        }
-
-        private bool ChatExists(int chat_id)
-        {
-            var fileName = GetChatLogPath(chat_id);
-            return File.Exists(fileName);
-        }
-
-
         private static Random random = new Random();
 
         private int GenerateUserID()
         {
-            lock (convos)
+            lock (instances)
             {
                 int randomID;
 
                 do
                 {
-                    randomID = 1000 + random.Next() % 8999;
+                    randomID = 1000 + random.Next() % 899999;
 
-                    if (!ChatExists(randomID))
+                    var bot = FindBot(randomID, createIfNotExist: false);
+
+                    if (bot == null)
                     {
                         return randomID;
                     }
@@ -470,11 +665,33 @@ namespace LunarLabs.Bots
 
             var chat_id = GetChatID(request);
 
+            var bot = FindBot(chat_id);
+
+            bool hasControls = false;
+
             var context = new Dictionary<string, object>();
             context["user_name"] = "Anonymous";
             context["user_id"] = user_id;
             context["chat_id"] = chat_id;
-            context["chat"] = BeautifyConvo(FindConvo(chat_id));
+
+            if (bot != null && bot.convo != null)
+            {
+                var chat = BeautifyConvo(bot.convo);
+
+                if (chat.Any())
+                {
+                    hasControls = chat.Count >= 2;
+
+                    var last = chat.Last();
+
+                    if (last.isAssistant && last.options != null)
+                    {
+                        context["options"] = last.options;
+                    }
+                }
+
+                context["chat"] = chat;
+            }
 
             request.session.SetString("user_id", user_id);
             request.session.SetInt("chat_id", chat_id);
@@ -483,6 +700,8 @@ namespace LunarLabs.Bots
             {
                 context["pending"] = pending.Contains(chat_id);
             }
+
+            context["has_controls"] = hasControls;
 
             return context;
         }
