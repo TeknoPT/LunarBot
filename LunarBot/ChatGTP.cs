@@ -704,7 +704,7 @@ namespace LunarLabs.Bots
 
                     var last = chat.Last();
 
-                    if (last.isAssistant && last.options != null)
+                    if (last.isAssistant && last.options != null  && chat.Count <= 2 )
                     {
                         context["options"] = last.options;
                     }

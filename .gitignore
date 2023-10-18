@@ -2,3 +2,5 @@ packages/
 .vs/
 LunarBot/bin
 LunarBot/obj
+.DS_Store
+.idea/**/**
